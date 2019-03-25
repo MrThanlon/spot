@@ -6,7 +6,7 @@
                 <div class="card">
                     <div class="card-body shadow pl-2 pr-2">
                         <ul class="list-group list-group-horizontal d-flex flex-wrap p-0">
-                            <li class="list-group-item flex-fill mb-2">
+                            <li class="list-group-item flex-fill mb-2" v-if="count_down !== 0">
                                 倒计时
                                 <div class="alert alert-secondary">
                                     {{count_down}}毫秒
@@ -119,17 +119,39 @@
         data: function () {
             return {
                 stat_str: "加载中",
+                /**
+                 * 状态标记，
+                 * - 0.初始化完成，等同于3
+                 * - 1.倒计时
+                 * - 2.抢答
+                 * - 3.结束，出结果
+                 * - 4.暂停
+                 */
                 stat: 0,
-                count_down: 10,
+                count_down: 0,
                 is_start: false,
                 is_pause: true,
                 is_recov: true,
                 is_reset: true,
-                t1: 3000,
-                t2: 10000,
+                t1: "",
+                t2: "",
+                /**
+                 * 倒计时结束时刻
+                 */
+                nt: 0,
+                /**
+                 * 与服务器的时间差，>0为服务器快于本机，<0为本机快于服务器
+                 */
+                t_sync: 0,
+                /**
+                 * 用于保存暂停时候的倒计时
+                 */
+                tmp_t: 0,
+                be_t: 0,
                 users: [],
                 results: [],
-                stat_text: ["初始化", "倒计时", "抢答", "结束", "暂停"]
+                stat_text: ["初始化完成", "倒计时", "抢答", "结束", "暂停"],
+                sig_t: 0
             }
         },
         created: function () {
@@ -139,13 +161,25 @@
                 console.debug(`[WS_MSG] Connect failed`)
                 //alert(`连接失败`)
             }
+            //123
             ws_msg.onmessage = (e) => {
                 console.debug(`[WS_MSG] Message:${e.data}`)
                 const msg = JSON.parse(e.data)
                 this.results = msg.res
-                this.stat = msg.stat
-                this.stat_str = this.stat_text[this.stat]
+                this.t_sync = msg.ct - new Date().getTime()
+                this.nt = msg.nt
 
+                this.stat = msg.stat
+
+                if (this.stat !== 1 && this.stat !== 2) {
+                    //停止
+                    this.count_down = 0
+                    cancelAnimationFrame(this.sig_t)
+                } else {
+                    //调用倒计时动画
+                    this.act_countdown()
+                }
+                this.stat_str = this.stat_text[this.stat]
             }
             ws_msg.onclose = (e) => {
                 console.debug(`[WS_MSG] WebSocket closed`, e)
@@ -247,7 +281,7 @@
                         this.is_start = false
                         this.is_pause = true
                         this.is_reset = false
-                        alert(`发送成功！`)
+                        //alert(`发送成功！`)
                     }
                 }
                 xhr.open('get', `http://${document.domain}:8090/ctr?act=start`, true)
@@ -264,7 +298,7 @@
                         }
                         this.is_pause = true
                         this.is_recov = false
-                        alert(`发送成功`)
+                        //alert(`发送成功`)
                     }
                 }
                 xhr.open('get', `http://${document.domain}:8090/ctr?act=pause`, true)
@@ -281,7 +315,7 @@
                         }
                         this.is_pause = false
                         this.is_recov = true
-                        alert(`发送成功`)
+                        //alert(`发送成功`)
                     }
                 }
                 xhr.open('get', `http://${document.domain}:8090/ctr?act=continue`, true)
@@ -300,11 +334,25 @@
                         this.is_pause = true
                         this.is_recov = true
                         this.is_reset = true
-                        alert(`发送成功`)
+                        //alert(`发送成功`)
                     }
                 }
                 xhr.open('get', `http://${document.domain}:8090/ctr?act=reset`, true)
                 xhr.send()
+            },
+
+            act_countdown: function () {
+                //倒计时动画
+                if ((this.stat !== 1 &&
+                    this.stat !== 2) ||
+                    this.count_down < 0) {
+                    //停止
+                    this.count_down = 0
+                    return
+                }
+                //当前倒计时等于结束时刻-当前时刻（当前时刻与服务器时差的修正）
+                this.count_down = this.nt - new Date().getTime() + this.t_sync
+                this.sig_t = requestAnimationFrame(this.act_countdown)
             }
         }
     }
