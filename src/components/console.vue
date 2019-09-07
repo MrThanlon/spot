@@ -94,8 +94,10 @@
                                             <v-icon name="check"></v-icon>
                                         </button>
                                     </div>
-                                    <div class="input-group-append" v-if="stat !== 0">
-                                        <span class="input-group-text" id="basic-addon2">测试毫秒</span>
+                                    <div class="input-group-append" v-if="stat !== 0 && results[idx] !== 0">
+                                        <span class="input-group-text"
+                                              :class="[results[idx] > 0 ? 'text-success' : 'text-danger' ]"
+                                              id="basic-addon2">{{results[idx]}}ms</span>
                                     </div>
                                 </div>
                             </li>
@@ -161,7 +163,12 @@
                 console.debug(`[WS_MSG] Connect failed`)
                 //alert(`连接失败`)
             }
-            //123
+            ws_msg.onclose = (e) => {
+                console.debug(`[WS_MSG] WebSocket closed`, e)
+            }
+            /**
+             * FIXME: 修改为响应式处理，不用专门判断stat，参考display组件
+             */
             ws_msg.onmessage = (e) => {
                 console.debug(`[WS_MSG] Message:${e.data}`)
                 const msg = JSON.parse(e.data)
@@ -173,7 +180,9 @@
 
                 if (this.stat !== 1 && this.stat !== 2) {
                     //停止
-                    this.count_down = 0
+                    if (this.stat !== 4)
+                    //不是暂停，倒计时清空
+                        this.count_down = 0
                     cancelAnimationFrame(this.sig_t)
                 } else {
                     //调用倒计时动画
@@ -181,14 +190,14 @@
                 }
                 this.stat_str = this.stat_text[this.stat]
             }
-            ws_msg.onclose = (e) => {
-                console.debug(`[WS_MSG] WebSocket closed`, e)
-            }
             //配置文件变化
             let ws_cof = new WebSocket(`ws://${document.domain}:3000/config`)
             ws_cof.onerror = function () {
                 console.debug(`[WS_COF] Connect failed`)
                 //alert(`连接失败`)
+            }
+            ws_cof.onclose = (e) => {
+                console.debug(`[WS_COF] WebSocket closed:`, e)
             }
             ws_cof.onmessage = (e) => {
                 console.debug(`[WS_COF] Message:${e.data}`)
@@ -199,9 +208,9 @@
                 this.t2 = conf.t2
                 this.users = conf.names
             }
-            ws_cof.onclose = (e) => {
-                console.debug(`[WS_COF] WebSocket closed:`, e)
-            }
+            /**
+             * TODO: RTT功能
+             */
         },
         methods: {
             rename: function (idx) {
@@ -351,7 +360,7 @@
                     return
                 }
                 //当前倒计时等于结束时刻-当前时刻（当前时刻与服务器时差的修正）
-                this.count_down = this.nt - new Date().getTime() + this.t_sync
+                this.count_down = this.nt - (new Date().getTime() + this.t_sync)
                 this.sig_t = requestAnimationFrame(this.act_countdown)
             }
         }
